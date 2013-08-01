@@ -334,6 +334,8 @@ static void mmap_cache_free(MMapCache *m) {
                 if (m->contexts[i])
                         context_free(m->contexts[i]);
 
+        hashmap_free(m->contexts);
+
         while ((f = hashmap_first(m->fds)))
                 fd_free(f);
 
