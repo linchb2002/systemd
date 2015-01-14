@@ -799,8 +799,10 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
                         service->path = fpath;
 
                         r = hashmap_put(all_services, service->name, service);
-                        if (r < 0)
+                        if (r < 0) {
+                                free(service);
                                 return log_oom();
+                        }
 
                         name = fpath = NULL;
                         service = NULL;
