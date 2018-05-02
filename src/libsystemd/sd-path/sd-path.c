@@ -556,7 +556,8 @@ static int get_search(uint64_t type, char ***list) {
 }
 
 _public_ int sd_path_search(uint64_t type, const char *suffix, char ***paths) {
-        char **l, **i, **j, **n;
+        char **i, **j;
+        _cleanup_strv_free_ char **l = NULL, **n = NULL;
         int r;
 
         assert_return(paths, -EINVAL);
@@ -585,7 +586,7 @@ _public_ int sd_path_search(uint64_t type, const char *suffix, char ***paths) {
                 l[0] = p;
                 l[1] = NULL;
 
-                *paths = l;
+                *paths = TAKE_PTR(l);
                 return 0;
         }
 
@@ -594,15 +595,13 @@ _public_ int sd_path_search(uint64_t type, const char *suffix, char ***paths) {
                 return r;
 
         if (!suffix) {
-                *paths = l;
+                *paths = TAKE_PTR(l);
                 return 0;
         }
 
         n = new(char*, strv_length(l)+1);
-        if (!n) {
-                strv_free(l);
+        if (!n)
                 return -ENOMEM;
-        }
 
         j = n;
         STRV_FOREACH(i, l) {
@@ -612,16 +611,13 @@ _public_ int sd_path_search(uint64_t type, const char *suffix, char ***paths) {
                 else
                         *j = strjoin(*i, "/", suffix, NULL);
 
-                if (!*j) {
-                        strv_free(l);
-                        strv_free(n);
+                if (!*j)
                         return -ENOMEM;
-                }
 
                 j++;
         }
 
         *j = NULL;
-        *paths = n;
+        *paths = TAKE_PTR(n);
         return 0;
 }
