@@ -143,6 +143,8 @@ typedef struct CustomMount {
         char **lower;
 } CustomMount;
 
+#include "config.h"
+
 static char *arg_directory = NULL;
 static char *arg_template = NULL;
 static char *arg_user = NULL;
@@ -4286,7 +4288,12 @@ static int inner_child(
                 a[0] = (char*) "/sbin/init";
                 execve(a[0], a, env_use);
         } else if (argc > optind)
+#ifdef HAVE_EXECVPE
                 execvpe(argv[optind], argv + optind, env_use);
+#else
+                environ = env_use;
+                execvp(argv[optind], argv + optind);
+#endif /* HAVE_EXECVPE */
         else {
                 chdir(home ? home : "/root");
                 execle("/bin/bash", "-bash", NULL, env_use);
