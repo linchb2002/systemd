@@ -94,6 +94,7 @@
 #include "terminal-util.h"
 #include "hostname-util.h"
 #include "signal-util.h"
+#include "config.h"
 
 /* Put this test here for a lack of better place */
 assert_cc(EAGAIN == EWOULDBLOCK);
@@ -5129,7 +5130,12 @@ int mkostemp_safe(char *pattern, int flags) {
 
         u = umask(077);
 
+#ifdef HAVE_MKOSTEMP
         fd = mkostemp(pattern, flags);
+#else
+        fd = mkstemp(pattern);
+        if (fd >= 0) fcntl(fd, F_SETFD, flags);
+#endif /* HAVE_MKOSTEMP */
         if (fd < 0)
                 return -errno;
 
