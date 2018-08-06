@@ -237,7 +237,7 @@ static int specifier_user_home(char specifier, void *data, void *userdata, char 
                  * best of it if we can, but fail if we can't */
 
                 if (!c->user || streq(c->user, "root") || streq(c->user, "0"))
-                        n = strdup("/root");
+                        n = strdup(ROOTHOMEDIR);
                 else
                         return -EOPNOTSUPP;
 

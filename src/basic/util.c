@@ -3223,7 +3223,7 @@ int get_user_creds(
                         *gid = 0;
 
                 if (home)
-                        *home = "/root";
+                        *home = ROOTHOMEDIR;
 
                 if (shell)
                         *shell = "/bin/sh";
@@ -4059,7 +4059,7 @@ int get_home_dir(char **_h) {
         /* Hardcode home directory for root to avoid NSS */
         u = getuid();
         if (u == 0) {
-                h = strdup("/root");
+                h = strdup(ROOTHOMEDIR);
                 if (!h)
                         return -ENOMEM;
 
