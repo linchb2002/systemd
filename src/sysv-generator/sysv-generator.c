@@ -39,7 +39,8 @@
 
 typedef enum RunlevelType {
         RUNLEVEL_UP,
-        RUNLEVEL_DOWN
+        RUNLEVEL_DOWN,
+        RUNLEVEL_SYSINIT
 } RunlevelType;
 
 static const struct {
@@ -54,6 +55,9 @@ static const struct {
         { "rc4.d",  SPECIAL_MULTI_USER_TARGET, RUNLEVEL_UP },
         { "rc5.d",  SPECIAL_GRAPHICAL_TARGET,  RUNLEVEL_UP },
 
+        /* Debian style rcS.d, also adopted by OE */
+        { "rcS.d",  SPECIAL_SYSINIT_TARGET,   RUNLEVEL_SYSINIT },
+
         /* Standard SysV runlevels for shutdown */
         { "rc0.d",  SPECIAL_POWEROFF_TARGET,  RUNLEVEL_DOWN },
         { "rc6.d",  SPECIAL_REBOOT_TARGET,    RUNLEVEL_DOWN }
@@ -62,7 +66,7 @@ static const struct {
            directories in this order, and we want to make sure that
            sysv_start_priority is known when we first load the
            unit. And that value we only know from S links. Hence
-           UP must be read before DOWN */
+           UP/SYSINIT must be read before DOWN  */
 };
 
 const char *arg_dest = "/tmp";
@@ -80,6 +84,8 @@ typedef struct SysvStub {
         char **conflicts;
         bool has_lsb;
         bool reload;
+        bool default_dependencies;
+        bool from_rcsd;
 } SysvStub;
 
 static void free_sysvstub(SysvStub *s) {
@@ -189,6 +195,9 @@ static int generate_unit_file(SysvStub *s) {
                 "SourcePath=%s\n"
                 "Description=%s\n",
                 s->path, s->description);
+
+         if (!s->default_dependencies)
+             fprintf(f, "DefaultDependencies=no\n");
 
         if (!isempty(before))
                 fprintf(f, "Before=%s\n", before);
@@ -697,18 +706,31 @@ static int fix_order(SysvStub *s, Hashmap *all_services) {
                 if (s->has_lsb && other->has_lsb)
                         continue;
 
-                if (other->sysv_start_priority < s->sysv_start_priority) {
-                        r = strv_extend(&s->after, other->name);
-                        if (r < 0)
-                                return log_oom();
-                }
-                else if (other->sysv_start_priority > s->sysv_start_priority) {
+                /* All scripts under /etc/rcS.d should execute before scripts under
+                 * /etc/rcN.d */
+                if (!other->from_rcsd && s->from_rcsd) {
                         r = strv_extend(&s->before, other->name);
                         if (r < 0)
                                 return log_oom();
+                } else if (other->from_rcsd && !s->from_rcsd) {
+                        r = strv_extend(&s->after, other->name);
+                        if (r < 0)
+                                return log_oom();
+                } else {
+                        if (other->sysv_start_priority < s->sysv_start_priority) {
+                                r = strv_extend(&s->after, other->name);
+                                if (r < 0)
+                                    return log_oom();
+                        }   
+                        else if (other->sysv_start_priority > s->sysv_start_priority) {
+                                r = strv_extend(&s->before, other->name);
+                                if (r < 0)
+                                    return log_oom();
+                        }   
+                        else
+                                continue;
+
                 }
-                else
-                        continue;
 
                 /* FIXME: Maybe we should compare the name here lexicographically? */
         }
@@ -771,6 +793,8 @@ static int enumerate_sysv(const LookupPaths *lp, Hashmap *all_services) {
                                 return log_oom();
 
                         service->sysv_start_priority = -1;
+                        service->default_dependencies = true;
+                        service->from_rcsd = false;
                         service->name = name;
                         service->path = fpath;
 
@@ -859,9 +883,11 @@ static int set_dependencies_from_rcnd(const LookupPaths *lp, Hashmap *all_servic
 
                                 if (de->d_name[0] == 'S')  {
 
-                                        if (rcnd_table[i].type == RUNLEVEL_UP) {
+                                        if (rcnd_table[i].type == RUNLEVEL_UP || rcnd_table[i].type == RUNLEVEL_SYSINIT) {
                                                 service->sysv_start_priority =
                                                         MAX(a*10 + b, service->sysv_start_priority);
+                                                service->default_dependencies = (rcnd_table[i].type == RUNLEVEL_SYSINIT)?false:true;
+                                                service->from_rcsd = (rcnd_table[i].type == RUNLEVEL_SYSINIT)?true:false;
                                         }
 
                                         r = set_ensure_allocated(&runlevel_services[i], NULL);
@@ -873,7 +899,8 @@ static int set_dependencies_from_rcnd(const LookupPaths *lp, Hashmap *all_servic
                                                 goto finish;
 
                                 } else if (de->d_name[0] == 'K' &&
-                                           (rcnd_table[i].type == RUNLEVEL_DOWN)) {
+                                        (rcnd_table[i].type == RUNLEVEL_DOWN ||
+                                         rcnd_table[i].type == RUNLEVEL_SYSINIT)) {
 
                                         r = set_ensure_allocated(&shutdown_services, NULL);
                                         if (r < 0)
