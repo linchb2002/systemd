@@ -2,5 +2,5 @@
 #
 # Used by systemd --user instances.
 
-account  include system-auth
-session  include system-auth
+account  include common-account
+session  include common-session
