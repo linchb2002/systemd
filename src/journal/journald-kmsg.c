@@ -33,6 +33,7 @@
 #include "journald-syslog.h"
 #include "formats-util.h"
 #include "process-util.h"
+#include "config.h"
 
 void server_forward_kmsg(
         Server *s,
@@ -436,6 +437,7 @@ fail:
 int server_open_kernel_seqnum(Server *s) {
         _cleanup_close_ int fd;
         uint64_t *p;
+        int r = 0;
 
         assert(s);
 
@@ -448,8 +450,19 @@ int server_open_kernel_seqnum(Server *s) {
                 log_error_errno(errno, "Failed to open /run/systemd/journal/kernel-seqnum, ignoring: %m");
                 return 0;
         }
-
-        if (posix_fallocate(fd, 0, sizeof(uint64_t)) < 0) {
+#ifdef HAVE_POSIX_FALLOCATE
+        r = posix_fallocate(fd, 0, sizeof(uint64_t));
+#else
+        /* Use good old method to write zeros into the journal file
+         * perhaps very inefficient yet working. */
+        char *buf = alloca(sizeof(uint64_t));
+        off_t oldpos = lseek(fd, 0, SEEK_CUR);
+        bzero(buf, sizeof(uint64_t));
+        lseek(fd, 0, SEEK_SET);
+        r = write(fd, buf, sizeof(uint64_t));
+        lseek(fd, oldpos, SEEK_SET);
+#endif /* HAVE_POSIX_FALLOCATE */
+        if (r < 0) {
                 log_error_errno(errno, "Failed to allocate sequential number file, ignoring: %m");
                 return 0;
         }

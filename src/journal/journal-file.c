@@ -36,6 +36,8 @@
 #include "compress.h"
 #include "random-util.h"
 
+#include "config.h"
+
 #define DEFAULT_DATA_HASH_TABLE_SIZE (2047ULL*sizeof(HashItem))
 #define DEFAULT_FIELD_HASH_TABLE_SIZE (333ULL*sizeof(HashItem))
 
@@ -354,7 +356,7 @@ static int journal_file_fstat(JournalFile *f) {
 
 static int journal_file_allocate(JournalFile *f, uint64_t offset, uint64_t size) {
         uint64_t old_size, new_size;
-        int r;
+        int r = 0;
 
         assert(f);
 
@@ -418,9 +420,22 @@ static int journal_file_allocate(JournalFile *f, uint64_t offset, uint64_t size)
         /* Note that the glibc fallocate() fallback is very
            inefficient, hence we try to minimize the allocation area
            as we can. */
+#ifdef HAVE_POSIX_FALLOCATE
         r = posix_fallocate(f->fd, old_size, new_size - old_size);
         if (r != 0)
                 return -r;
+#else
+        /* Write something every 512 bytes to make sure the block is allocated */
+        uint64_t len = new_size - old_size;
+        uint64_t offset = old_size;
+        for (offset += (len-1) % 512; len > 0; offset += 512) {
+            len -= 512;
+            if (pwrite(f->fd, "", 1, offset) != 1)
+                return -errno;
+        }
+
+#endif /* HAVE_POSIX_FALLOCATE */
+
 
         f->header->arena_size = htole64(new_size - le64toh(f->header->header_size));
 
