@@ -150,8 +150,6 @@ static void socket_done(Unit *u) {
         free(s->user);
         free(s->group);
 
-        s->fdname = mfree(s->fdname);
-
         s->timer_event_source = sd_event_source_unref(s->timer_event_source);
 }
 
