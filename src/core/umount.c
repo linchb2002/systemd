@@ -49,8 +49,6 @@ static void mount_point_free(MountPoint **head, MountPoint *m) {
         LIST_REMOVE(mount_point, *head, m);
 
         free(m->path);
-        free(m->options);
-        free(m->type);
         free(m);
 }
 
