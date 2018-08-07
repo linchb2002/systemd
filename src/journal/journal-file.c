@@ -112,10 +112,8 @@ int journal_file_set_offline(JournalFile *f) {
         if (!(f->fd >= 0 && f->header))
                 return -EINVAL;
 
-        /* An offlining journal is implicitly online and may modify f->header->state,
-         * we must also join any potentially lingering offline thread when not online. */
-        if (!journal_file_is_offlining(f) && f->header->state != STATE_ONLINE)
-                return journal_file_set_offline_thread_join(f);
+        if (f->header->state != STATE_ONLINE)
+                return 0;
 
         fsync(f->fd);
 
